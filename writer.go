@@ -36,10 +36,6 @@ func (w *Writer) WriteMessage(messages ...*Message) error {
 }
 
 func send(id int, ch rune, data []byte) []byte {
-	if id > maxID {
-		panic("binproto: ID too big")
-	}
-
 	header := uint64(id)<<4 | uint64(ch)
 	length := len(data) + encodingLength(header)
 	payload := make([]byte, encodingLength(uint64(length))+length)
