@@ -9,6 +9,7 @@ type Reader struct {
 	rd       io.Reader
 	r, w     int
 	buf      []byte
+	size     int
 	err      error
 	state    int
 	factor   uint64
@@ -22,22 +23,16 @@ type Reader struct {
 }
 
 const (
-	minReadBufferSize = 16
-
-	defaultMaxMessageSize = 8 * 1024 * 1024
-	defaultBufSize        = 4096
+	minReadBufferSize        = 16
+	defaultMaxMessageSize    = 8 * 1024 * 1024
+	defaultBufSize           = 4096
+	maxConsecutiveEmptyReads = 100
 )
 
 var (
 	ErrMessageSizeExceeded = errors.New("binproto: message too big")
 	ErrMessageMalformed    = errors.New("binproto: message malformed")
 )
-
-var (
-	errNegativeRead = errors.New("binproto: reader returned negative count from Read")
-)
-
-const maxConsecutiveEmptyReads = 16
 
 func NewReader(rd io.Reader) *Reader {
 	return NewReaderSize(rd, defaultBufSize)
@@ -53,9 +48,10 @@ func NewReaderSize(rd io.Reader, size int) *Reader {
 }
 
 func (b *Reader) fill() {
-	// Slide existing data to beginning.
 	if b.r > 0 {
-		copy(b.buf, b.buf[b.r:b.w])
+		if b.r != b.w {
+			copy(b.buf, b.buf[b.r:b.w])
+		}
 		b.w -= b.r
 		b.r = 0
 	}
@@ -63,17 +59,17 @@ func (b *Reader) fill() {
 	length := len(b.buf)
 
 	if b.w >= length {
-		panic("bufio: tried to fill full buffer")
+		panic("binproto: tried to fill full buffer")
 	}
 
 	for i := maxConsecutiveEmptyReads; i > 0; i-- {
 		n, err := b.rd.Read(b.buf[b.w:])
 		if n < 0 {
-			panic(errNegativeRead)
+			panic("binproto: reader returned negative count from Read")
 		}
 		b.w += n
 		if err != nil {
-			if errors.Is(err, io.EOF) && b.missing > 0 {
+			if errors.Is(err, io.EOF) && b.state != 0 {
 				err = io.ErrUnexpectedEOF
 			}
 			b.err = err
@@ -92,8 +88,6 @@ func (b *Reader) fill() {
 }
 
 func (b *Reader) ReadMessage() (message *Message, err error) {
-	bufferLength := len(b.buf)
-
 	for {
 		if b.err != nil {
 			message = nil
@@ -121,21 +115,21 @@ func (b *Reader) ReadMessage() (message *Message, err error) {
 
 		if b.r < b.w {
 			if b.state == 2 {
-				b.r = b.readMessage(b.buf[:b.w], b.r)
+				b.r = b.readMessage()
 			} else {
-				b.r = b.readVarint(b.buf[:b.w], b.r)
+				b.r = b.readVarint()
 			}
 			continue
 		}
 
 		if b.state == 2 && b.length == 0 {
-			b.r = b.readMessage(b.buf, b.r)
+			b.r = b.readMessage()
 			continue
 		}
 
 		// Is buffer big enough?
 		remaining := b.length - b.consumed
-		if b.w+remaining > bufferLength {
+		if b.w+remaining > b.size {
 			b.r = b.w
 			err = io.ErrShortBuffer
 			break
@@ -154,7 +148,7 @@ func (b *Reader) Reset(r io.Reader) {
 	b.reset(b.buf, r)
 }
 
-func (b *Reader) next(data []byte, offset int) bool {
+func (b *Reader) next() bool {
 	switch b.state {
 	case 0:
 		b.state = 1
@@ -175,11 +169,11 @@ func (b *Reader) next(data []byte, offset int) bool {
 		b.consumed = 0
 		b.varint = 0
 		if b.length < 0 || b.length > defaultMaxMessageSize {
-			b.destroy(ErrMessageSizeExceeded)
+			b.err = ErrMessageSizeExceeded
 
 			return false
 		}
-		extra := len(data) - offset
+		extra := len(b.buf[:b.w]) - b.r
 		if b.length > extra {
 			b.missing = b.length - extra
 		}
@@ -196,10 +190,11 @@ func (b *Reader) next(data []byte, offset int) bool {
 	}
 }
 
-func (b *Reader) readMessage(data []byte, offset int) int {
-	l := len(data)
+func (b *Reader) readMessage() int {
+	data, offset := b.buf[:b.w], b.r
+	length := len(data)
 
-	free := l - offset
+	free := length - offset
 	if free >= b.length {
 		if b.latest != nil {
 			copy(b.latest[len(b.latest)-b.length:], data[offset:])
@@ -210,11 +205,11 @@ func (b *Reader) readMessage(data []byte, offset int) int {
 
 		offset += b.length
 
-		if b.next(data, offset) {
+		if b.next() {
 			return offset
 		}
 
-		return l
+		return length
 	}
 
 	if b.latest == nil {
@@ -225,10 +220,12 @@ func (b *Reader) readMessage(data []byte, offset int) int {
 
 	b.length -= free
 
-	return l
+	return length
 }
 
-func (b *Reader) readVarint(data []byte, offset int) int {
+func (b *Reader) readVarint() int {
+	data, offset := b.buf[:b.w], b.r
+
 	for ; offset < len(data); offset++ {
 		b.varint += uint64(data[offset]&127) * b.factor
 		b.consumed += 1
@@ -236,7 +233,7 @@ func (b *Reader) readVarint(data []byte, offset int) int {
 		if data[offset] < 128 {
 			offset += 1
 
-			if b.next(data, offset) {
+			if b.next() {
 				return offset
 			}
 			return len(data)
@@ -246,7 +243,7 @@ func (b *Reader) readVarint(data []byte, offset int) int {
 	}
 
 	if b.consumed >= 11 {
-		b.destroy(ErrMessageMalformed)
+		b.err = ErrMessageMalformed
 	}
 
 	return len(data)
@@ -262,12 +259,7 @@ func (b *Reader) reset(buf []byte, r io.Reader) {
 	*b = Reader{
 		rd:     r,
 		buf:    buf,
+		size:   len(buf),
 		factor: 1,
-	}
-}
-
-func (b *Reader) destroy(err error) {
-	if err != nil {
-		b.err = err
 	}
 }
