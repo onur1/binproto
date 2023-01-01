@@ -5,6 +5,8 @@ import (
 	"io"
 )
 
+// A Reader implements convenience methods for reading requests
+// or responses from a binary protocol network connection.
 type Reader struct {
 	rd       io.Reader
 	r, w     int
@@ -34,10 +36,16 @@ var (
 	ErrMessageMalformed    = errors.New("binproto: message malformed")
 )
 
+// NewReader returns a new Reader reading from r.
+//
+// By default, a Reader allocates `4096` bytes for its internal buffer,
+// and will process what's inside the buffer as long as its size
+// is greater than this limit.
 func NewReader(rd io.Reader) *Reader {
 	return NewReaderSize(rd, defaultBufSize)
 }
 
+// NewReaderSize returns a new Reader with the specified buffer size.
 func NewReaderSize(rd io.Reader, size int) *Reader {
 	if size < minReadBufferSize {
 		size = minReadBufferSize
@@ -87,6 +95,7 @@ func (b *Reader) fill() {
 	b.err = io.ErrNoProgress
 }
 
+// ReadMessage reads a single message from r.
 func (b *Reader) ReadMessage() (message *Message, err error) {
 	for {
 		if b.err != nil {
@@ -141,6 +150,8 @@ func (b *Reader) ReadMessage() (message *Message, err error) {
 	return
 }
 
+// Reset resets this Reader with the new source r, using
+// the existing buffer.
 func (b *Reader) Reset(r io.Reader) {
 	if b.buf == nil {
 		b.buf = make([]byte, defaultBufSize)
