@@ -1,10 +1,19 @@
 # binproto
 
-generic support for binary-based request response protocols.
+binproto implements generic support for binary-based request response protocols.
 
 ## Message format
 
-binproto header is a varint encoded unsigned 64-bit integer which consist of an ID (first 60-bits) and a Channel number (last 4-bits). The rest of the message is data.
+Over the wire messages are length-prefixed and packed in the following format:
+
+```
+<varint - length of rest of message>
+  <varint - header>
+  <payload>
+```
+
+Each message starts with an header which is a varint encoded unsigned 64-bit integer which consists of an ID (first 60-bits) and a Channel number (last 4-bits), the rest of the message is payload.
+
 
 ## Buffered
 
