@@ -81,7 +81,7 @@ jobs:
           local next
           if [[ -z "$(git describe --contains "$commit" 2>/dev/null)" ]]; then
             next="$(next_version "$1")"
-            git tag "$next"
+            git tag "v$next"
             git config user.name github-actions
             git config user.email github-actions@github.com
             git push --tags
