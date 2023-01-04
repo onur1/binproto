@@ -1,20 +1,11 @@
 # binproto
 
-binproto implements generic support for binary-based request response protocols.
+binproto implements generic support for binary-based request response protocols. You can use it to create your own binary network protocols for things like RPC or file transfer.
 
-## Message format
+![Build](https://github.com/onur1/binproto/actions/workflows/main.yml/badge.svg)
 
-Over the wire messages are length-prefixed and packed in the following format:
+[**Getting started with binproto**](https://onurgunduz.com/binproto)
 
-```
-<varint - length of rest of message>
-  <varint - header>
-  <payload>
-```
+[**See the full API documentation at pkg.go.dev**](https://pkg.go.dev/github.com/onur1/binproto)
 
-Each message starts with an header which is a varint encoded unsigned 64-bit integer which consists of an ID (first 60-bits) and a Channel number (last 4-bits), the rest of the message is payload.
-
-
-## Buffered
-
-binproto uses an internal buffer which allocates 4096 bytes by default. You can adjust this value if your protocol requires larger (or smaller) chunks.
+[Report a bug or suggest a feature](https://github.com/onur1/binproto/issues)
