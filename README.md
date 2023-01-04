@@ -4,8 +4,8 @@ binproto implements generic support for binary-based request response protocols.
 
 ![Build](https://github.com/onur1/binproto/actions/workflows/main.yml/badge.svg)
 
-[**Getting started with binproto**](https://onurgunduz.com/binproto)
-
 [**See the full API documentation at pkg.go.dev**](https://pkg.go.dev/github.com/onur1/binproto)
+
+[**Getting started tutorial**](https://onurgunduz.com/binproto)
 
 [Report a bug or suggest a feature](https://github.com/onur1/binproto/issues)
