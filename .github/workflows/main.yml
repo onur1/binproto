@@ -54,7 +54,7 @@ jobs:
           then
             impact="patch"
           fi
-          current=$(git tag | sort -r | grep "^[0-9]*\.[0-9]*\.[0-9]" | sort -t "." -k1,1nr -k2,2nr -k3,3nr | head -1 2> /dev/null) || true
+          current=$(git tag | sort -r | grep "^v[0-9]*\.[0-9]*\.[0-9]" | sort -t "." -k1,1nr -k2,2nr -k3,3nr | cut -c2- | head -1 2> /dev/null) || true
           if [[ -z "$current" ]]; then
             current='0.0.0'
           fi
@@ -80,8 +80,8 @@ jobs:
           commit=$(git rev-parse HEAD)
           local next
           if [[ -z "$(git describe --contains "$commit" 2>/dev/null)" ]]; then
-            next="$(next_version "$1")"
-            git tag "v$next"
+            next="v$(next_version "$1")"
+            git tag "$next"
             git config user.name github-actions
             git config user.email github-actions@github.com
             git push --tags
