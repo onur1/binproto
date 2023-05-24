@@ -1,3 +1,5 @@
+// Package binproto implements low-level support for binary-based two-way
+// communication protocols.
 package binproto
 
 import (
